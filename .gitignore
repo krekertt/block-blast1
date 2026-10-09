@@ -1,5 +1,12 @@
-# Dependencies
-node_modules/
-
-# Logs and temp files
-*.log
+dbg.js
+dbg2.js
+dbg3.js
+dbg4.js
+dbg5.js
+dbgout.txt
+dbg2out.txt
+dbg3out.txt
+dbg4out.txt
+dbg5out.txt
+out9.txt
+out10.txt

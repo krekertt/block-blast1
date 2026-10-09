@@ -61,6 +61,21 @@ const store = {
   get(k) { try { return localStorage.getItem(k); } catch (_) { return null; } },
   set(k, v) { try { localStorage.setItem(k, v); } catch (_) {} },
 };
+
+/* Надёжная раскраска клеток.
+   Вместо CSS-классов (.c0...c6) цвет задаётся напрямую через inline
+   background — это защищает от двух известных багов:
+   1) кэш браузера отдаёт СТАРЫЙ style.css без классов .cN — тогда
+      блоки становились прозрачными: они есть и работают, но их не видно;
+   2) браузерные расширения (Dark Reader и т.п.) переопределяют
+      CSS-классы !important-стилями и «съедают» цвета фигур. */
+const PALETTE = ['#ef476f', '#ffd166', '#06d6a0', '#118ab2', '#9b5de5', '#f9844a', '#e0e1dd'];
+function paintCell(el, colorIdx) {
+  el.style.background = PALETTE[colorIdx % PALETTE.length];
+}
+function unpaintCell(el) {
+  el.style.background = '';
+}
 let best = +(store.get('bb_best') || 0);
 let comboChain = 0;      // линии, очищенные подряд (без «пустого» хода)
 let smartOn = true;
@@ -97,7 +112,13 @@ function renderBoard() {
       const el = cells[r][c];
       el.classList.remove('preview', 'preview-bad');
       const v = board[r][c];
-      el.className = 'cell' + (v === null ? '' : ` filled c${v}`);
+      if (v === null) {
+        el.className = 'cell';
+        unpaintCell(el);
+      } else {
+        el.className = 'cell filled';
+        paintCell(el, v);
+      }
     }
 }
 
@@ -278,7 +299,8 @@ function renderPieces() {
       for (let r = 0; r < rows; r++)
         for (let c = 0; c < cols; c++) {
           const cell = document.createElement('div');
-          cell.className = 'piece-cell' + (p.shape.m[r][c] ? ` c${p.color}` : ' empty');
+          cell.className = 'piece-cell' + (p.shape.m[r][c] ? '' : ' empty');
+          if (p.shape.m[r][c]) paintCell(cell, p.color);
           grid.appendChild(cell);
         }
       slot.appendChild(grid);
@@ -349,7 +371,8 @@ function startDrag(idx, x, y, pointerType) {
   for (let r = 0; r < rows; r++)
     for (let c = 0; c < cols; c++) {
       const d = document.createElement('div');
-      d.className = 'piece-cell' + (p.shape.m[r][c] ? ` c${p.color}` : ' empty');
+      d.className = 'piece-cell' + (p.shape.m[r][c] ? '' : ' empty');
+      if (p.shape.m[r][c]) paintCell(d, p.color);
       d.style.width = cs + 'px'; d.style.height = cs + 'px';
       ghostEl.appendChild(d);
     }
@@ -466,8 +489,15 @@ function finishDrop(x, y) {
   const slot = piecesEl.querySelector(`[data-idx="${idx}"]`);
   slot?.classList.remove('dragging');
   drag = null;
-  if (ok) placePiece(idx, br, bc);
-  // иначе — фигура остаётся в доке (ничего не пропадает)
+  if (ok) {
+    placePiece(idx, br, bc);
+  } else {
+    // НЕУДАЧНЫЙ ДРОП: фигура гарантированно остаётся в доке.
+    // Дополнительно выделяем её — если перетаскивание по какой-то
+    // причине недоступно, пользователь сразу может поставить её
+    // вторым кликом по полю (клик-режим).
+    if (!p.used) setSelected(idx);
+  }
 }
 
 function onDragEnd() {
@@ -595,9 +625,12 @@ document.addEventListener('visibilitychange', () => {
 /* ---------- размещение и очистка ---------- */
 function placePiece(idx, br, bc) {
   const p = pieces[idx];
+  if (!p || p.used) return; // защита от двойного вызова (drag + тап-страховка)
+  if (!canPlace(p.shape.m, br, bc)) return; // защита от записи за пределы/на занятые клетки
   const col = p.color;
   for (const [r, c] of shapeCells(p.shape.m)) board[br + r][bc + c] = col;
   p.used = true;
+  renderBoard();   // СРАЗУ перерисовываем поле — иначе блок «ставится», но не виден
 
   let gained = shapeCells(p.shape.m).length;
   const { rows, cols } = linesToClear(board);
