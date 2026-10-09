@@ -1,4 +1,5 @@
-node_modules/
+# Compressed files
+*.zipnode_modules/
 .next/
 dist/
 build/
