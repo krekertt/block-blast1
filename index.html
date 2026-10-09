@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Block Blast — Удобные блоки</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="logo">
+      <span class="logo-block b1"></span><span class="logo-block b2"></span><span class="logo-block b3"></span>
+      <h1>Block Blast</h1>
+    </div>
+    <div class="mode-row">
+      <label class="switch-label">
+        <input type="checkbox" id="smartMode" checked>
+        <span class="switch"></span>
+        <span>Умные блоки</span>
+      </label>
+      <select id="smartLevel">
+        <option value="easy" selected>Комфорт: легко</option>
+        <option value="medium">Комфорт: средне</option>
+        <option value="hardcore">Комфорт: хардкор</option>
+      </select>
+    </div>
+    <div class="scores">
+      <div class="score-box"><span id="score">0</span><small>Очки</small></div>
+      <div class="score-box"><span id="best">0</span><small>Рекорд</small></div>
+    </div>
+  </header>
+
+  <main class="board-wrap">
+    <div id="board" class="board"></div>
+    <div id="toast" class="toast hidden"></div>
+  </main>
+
+  <footer class="dock">
+    <div id="pieces" class="pieces"></div>
+    <button id="restart" class="btn-restart" title="Новая игра">↺ Заново</button>
+  </footer>
+
+  <div id="gameover" class="overlay hidden">
+    <div class="panel">
+      <h2>Игра окончена</h2>
+      <p>Нет ходов для оставшихся фигур.</p>
+      <p class="final-score">Счёт: <b id="finalScore">0</b></p>
+      <button id="againBtn" class="btn-big">Играть снова</button>
+    </div>
+  </div>
+</div>
+<div id="ghost" class="ghost hidden"></div>
+<script src="game.js"></script>
+</body>
+</html>
