@@ -158,6 +158,12 @@ body {
 .piece-cell.empty { background: transparent; box-shadow: none; }
 .piece-slot.no-fit .piece-cell:not(.empty) { opacity: .35; }
 .piece-slot.dragging { opacity: .25; }
+.piece-slot.selected {
+  outline: 3px solid var(--accent);
+  outline-offset: -1px;
+  box-shadow: 0 0 18px rgba(255, 209, 102, 0.45);
+  transform: translateY(-4px);
+}
 
 .btn-restart {
   background: rgba(255,255,255,0.12); color: #fff; border: 1px solid rgba(255,255,255,0.2);
