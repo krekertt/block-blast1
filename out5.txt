@@ -1,0 +1,13 @@
+A FAIL trial 0 cursor cell empty after drop
+A FAIL trial 1 cursor cell empty after drop
+A FAIL trial 2 cursor cell empty after drop
+A FAIL trial 3 cursor cell empty after drop
+A FAIL trial 4 cursor cell empty after drop
+A FAIL trial 5 cursor cell empty after drop
+TEST A cursor-cell covered: FAIL
+TEST B blast via UI: FAIL score= 1
+TEST C fast drag: PASS
+TEST D outside-drop safe: FAIL {"used":1,"ghostHidden":true,"dragging":false}
+TEST E click-select+place: FAIL sel=false
+TEST F session stability: PASS drops attempted: 50
+errors: none

@@ -57,7 +57,11 @@ const SHAPES = [
 let board = [];          // null | цвет(0..NCOLORS-1)
 let pieces = [null, null, null]; // {shape, color, used}
 let score = 0;
-let best = +(localStorage.getItem('bb_best') || 0);
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch (_) { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch (_) {} },
+};
+let best = +(store.get('bb_best') || 0);
 let comboChain = 0;      // линии, очищенные подряд (без «пустого» хода)
 let smartOn = true;
 let smartLevel = 'easy';
@@ -310,19 +314,24 @@ let drag = null; // {idx, gw, gh, touch, lastX, lastY}
 
 const TOUCH_LIFT = 90; // px — насколько поднимаем фигуру над пальцем
 
+/* Координаты указателя: берём из drag.lastX/lastY, которые обновляются
+   на каждом pointermove. Это защищает от «сбитого» прицела в браузерах,
+   где pointerup может прийти с устаревшими координатами (например,
+   после setPointerCapture в некоторых версиях Chrome/Firefox). */
 function attachDrag(slot, idx) {
   slot.addEventListener('pointerdown', e => {
     if (drag || pieces[idx].used) return;
     e.preventDefault();
-    try { slot.setPointerCapture(e.pointerId); } catch (_) {}
     tapCandidate = { idx, x: e.clientX, y: e.clientY };
     startDrag(idx, e.clientX, e.clientY, e.pointerType);
 
-    // если это был тап (мало движения) — выделяем фигуру для клик-размещения
+    // если это был тап (мало движения) и отпустили НЕ над полем —
+    // выделяем фигуру для клик-размещения (если отпустили над полем,
+    // фигура уже встанет туда через тап-страховку)
     const finishTapSelect = ev => {
       window.removeEventListener('pointerup', finishTapSelect);
       const moved = Math.hypot(ev.clientX - e.clientX, ev.clientY - e.clientY);
-      if (moved <= 14 && !pieces[idx].used) setSelected(idx);
+      if (moved <= 14 && !pieces[idx].used && !cellUnder(ev.clientX, ev.clientY)) setSelected(idx);
     };
     window.addEventListener('pointerup', finishTapSelect);
   });
@@ -386,7 +395,11 @@ function moveGhost(x, y) {
   updatePreview(x, y);
 }
 
-// клетка верхнего левого угла фигуры по позиции ghost-центра
+// клетка верхнего левого угла фигуры по позиции ghost-центра.
+// ВАЖНО: привязка — по ЦЕНТРАЛЬНОЙ КЛЕТКЕ bounding box'а фигуры,
+// поэтому фигура встаёт ровно туда, куда смотрит курсор/палец,
+// независимо от размера фигуры (раньше большие фигуры «уезжали»
+// на несколько клеток и не ставились — казалось, что блок пропал).
 function targetCell(x, y) {
   const o = boardOrigin();
   const cs = cellSize();
@@ -396,8 +409,16 @@ function targetCell(x, y) {
   const centerY = y - lift;
   const p = pieces[drag.idx];
   const rows = p.shape.m.length, cols = p.shape.m[0].length;
-  const bc = Math.round((centerX - o.left - pad - (cols * cs - 4) / 2) / cs);
-  const br = Math.round((centerY - o.top - pad - (rows * cs - 4) / 2) / cs);
+  // координаты в шагах сетки относительно внутренней области поля
+  const fx = (centerX - o.left - pad + 2) / cs;  // +2px — половина gap
+  const fy = (centerY - o.top - pad + 2) / cs;
+  // индекс центральной клетки bbox (для чётных размеров — чуть ниже/правее центра)
+  const ocx = (cols - 1) / 2, ocy = (rows - 1) / 2;
+  let bc = Math.round(fx - ocx);
+  let br = Math.round(fy - ocy);
+  // не даём фигуре вылезать за поле — прижимаем к краю
+  bc = Math.max(0, Math.min(SIZE - cols, bc));
+  br = Math.max(0, Math.min(SIZE - rows, br));
   return { br, bc };
 }
 
@@ -449,9 +470,12 @@ function finishDrop(x, y) {
   // иначе — фигура остаётся в доке (ничего не пропадает)
 }
 
-function onDragEnd(e) {
+function onDragEnd() {
   endDragListeners();
-  finishDrop(e.clientX, e.clientY);
+  // прицеливаемся по ПОСЛЕДНЕЙ позиции курсора (drag.lastX/lastY),
+  // а не по координатам из pointerup — в некоторых браузерах на ПК
+  // они бывают устаревшими, из-за чего блок «не ставился»
+  if (drag) finishDrop(drag.lastX, drag.lastY);
 }
 
 function onDragCancel() {
@@ -465,11 +489,19 @@ function onDragCancel() {
   }
 }
 
-/* ---------- тап-размещение (страховка для тача) ----------
-   Если после захвата фигуры палец/курсор почти не двигался и
-   закончил движение над полем — ставим фигуру в ближайшую к
-   точке тапа подходящую позицию. */
+/* ---------- тап-размещение (страховка) ----------
+   Если после захвата фигуры курсор/палец почти не двигался и закончил
+   движение НАД ПОЛЕМ — ставим фигуру в ближайшую подходящую позицию.
+   Если отпустил мимо поля — просто выделяем фигуру (клик-режим). */
 let tapCandidate = null; // {idx, x, y}
+
+// касание клетки под указателем (для точного определения цели тапа)
+function cellUnder(x, y) {
+  const el = document.elementFromPoint(x, y);
+  if (el && el.classList && el.classList.contains('cell'))
+    return { r: +el.dataset.r, c: +el.dataset.c };
+  return null;
+}
 
 function cellToCoords(x, y) {
   const o = boardOrigin();
@@ -481,6 +513,26 @@ function cellToCoords(x, y) {
   };
 }
 
+function overBoard(x, y) {
+  const o = boardOrigin();
+  return x >= o.left && x <= o.right && y >= o.top && y <= o.bottom;
+}
+
+// единый «прицельный» расчёт: ближайшая валидная позиция так,
+// чтобы ЦЕНТР bounding box'а фигуры лёг как можно ближе к клетке под
+// указателем (для больших фигур фигура получается вокруг точки тапа,
+// а не сдвигается вправо-вниз)
+function bestAimedPlacement(shapeM, tr, tc) {
+  const rows = shapeM.length, cols = shapeM[0].length;
+  const ocx = (cols - 1) / 2, ocy = (rows - 1) / 2;
+  let bestPos = null, bestD = Infinity;
+  for (const [r, c] of allPlacements(shapeM)) {
+    const d = (r + ocy - tr) ** 2 + (c + ocx - tc) ** 2;
+    if (d < bestD) { bestD = d; bestPos = [r, c]; }
+  }
+  return bestPos;
+}
+
 window.addEventListener('pointerup', e => {
   if (!tapCandidate) return;
   const tc = tapCandidate;
@@ -489,13 +541,11 @@ window.addEventListener('pointerup', e => {
   if (moved > 14) return; // это был полноценный drag — уже обработан
   const p = pieces[tc.idx];
   if (!p || p.used) return;
-  const { r: tr, c: tc2 } = cellToCoords(e.clientX, e.clientY);
-  // ищем ближайшую валидную позицию к клетке под точкой тапа
-  let bestPos = null, bestD = Infinity;
-  for (const [r, c] of allPlacements(p.shape.m)) {
-    const d = (r - tr) ** 2 + (c - tc2) ** 2;
-    if (d < bestD) { bestD = d; bestPos = [r, c]; }
-  }
+  // цель тапа — клетка точно под указателем (elementFromPoint надёжнее
+  // арифметики по getBoundingClientRect при зуме/скролле страницы)
+  const under = cellUnder(e.clientX, e.clientY);
+  if (!under) return; // отпустил мимо поля — не ставим (фигура выделится для клик-режима)
+  const bestPos = bestAimedPlacement(p.shape.m, under.r, under.c);
   if (bestPos) placePiece(tc.idx, bestPos[0], bestPos[1]);
 });
 
@@ -516,12 +566,9 @@ boardEl.addEventListener('click', e => {
   if (drag || selectedIdx === null) return;
   const p = pieces[selectedIdx];
   if (!p || p.used) { setSelected(null); return; }
-  const { r: tr, c: tc } = cellToCoords(e.clientX, e.clientY);
-  let bestPos = null, bestD = Infinity;
-  for (const [r, c] of allPlacements(p.shape.m)) {
-    const d = (r - tr) ** 2 + (c - tc) ** 2;
-    if (d < bestD) { bestD = d; bestPos = [r, c]; }
-  }
+  const under = cellUnder(e.clientX, e.clientY);
+  if (!under) return;
+  const bestPos = bestAimedPlacement(p.shape.m, under.r, under.c);
   if (bestPos) {
     const idx = selectedIdx;
     setSelected(null);
@@ -580,7 +627,7 @@ function placePiece(idx, br, bc) {
   }
 
   score += gained;
-  if (score > best) { best = score; localStorage.setItem('bb_best', best); }
+  if (score > best) { best = score; store.set('bb_best', best); }
   updateScores();
   renderPieces();
 
